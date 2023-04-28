@@ -7,7 +7,7 @@ import numpy as np
 from dataclasses import dataclass, fields
 from itertools import product
 
-submit_jobs = True
+submit_jobs = False
 
 @dataclass
 class Config:
@@ -53,6 +53,7 @@ for idx, exp in enumerate(exps):
     train_script = f'{fetch}/experiments/bvn/train_{idx}.py'
     with open(train_script, 'w') as f:
         f.write(template)
+    print(f'created {train_script}')
 
     # Build SLURM job submission script
     job_name = f'fetch_sweep_{idx}'
