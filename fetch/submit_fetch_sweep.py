@@ -7,7 +7,7 @@ import numpy as np
 from dataclasses import dataclass, fields
 from itertools import product
 
-submit_jobs = False
+submit_jobs = True
 
 @dataclass
 class Config:
@@ -18,16 +18,18 @@ class Config:
     metric_embed_dim: int = 16
     partition: str = 'seas_gpu'
     constraint: str = 'skylake'
+    n_cpus: int = 1
 
 # Setup sweep parameters like in the original train.py script
 env_name_ = ['FetchReach-v1', 'FetchPush-v1', 'FetchPickAndPlace-v1', 'FetchSlide-v1']
 n_workers_ = [2, 8, 16, 20]
 n_epochs_ = [50, 150, 200, 500]
+n_cpus_ = [1, 2, 4, 8]
 seed_ = [100, 200, 300, 400, 500]
 
 exps = []
-for (env_name, n_workers, n_epochs), seed in product(zip(env_name_, n_workers_, n_epochs_), seed_):
-    exp = Config(env_name=env_name, n_workers=n_workers, n_epochs=n_epochs, seed=seed)
+for (env_name, n_workers, n_epochs, n_cpus), seed in product(zip(env_name_, n_workers_, n_epochs_, n_cpus_), seed_):
+    exp = Config(env_name=env_name, n_workers=n_workers, n_epochs=n_epochs, n_cpus=n_cpus, seed=seed)
     exps.append(exp)
 
 # Update to match your fetch folder and python locations
@@ -46,10 +48,7 @@ for idx, exp in enumerate(exps):
 
     for field in fields(exp):
         value = getattr(exp, field.name)
-        if isinstance(value, str):
-            template = template.replace(f'<{field.name.upper()}>', f"'{value}'")
-        else:
-            template = template.replace(f'<{field.name.upper()}>', f'{value}')
+        template = template.replace(f'<{field.name.upper()}>', f"'{value}'" if isinstance(value, str) else f'{value}')
 
     train_script = f'{fetch}/experiments/bvn/train_{idx}.py'
     with open(train_script, 'w') as f:
@@ -67,8 +66,8 @@ for idx, exp in enumerate(exps):
         f.write(f'#SBATCH --partition={exp.partition}\n')
         if exp.constraint: 
             f.write(f'#SBATCH --constraint={exp.constraint}\n')
-        f.write(f'#SBATCH --time 2-00:00\n')
-        f.write(f'#SBATCH --cpus-per-task=1\n')
+        f.write(f'#SBATCH --time 5-00:00\n')
+        f.write(f'#SBATCH --cpus-per-task={n_cpus}\n')
         f.write(f'#SBATCH --gres=gpu:1\n')
         f.write(f'#SBATCH --mem=16G\n')
         f.write(f'\n')
