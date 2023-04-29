@@ -99,9 +99,12 @@ class ddpg_agent:
                     self.logger.print("%d" % n_iter, end=' ' if n_iter < self.args.n_cycles - 1 else '\n', flush=True)
                     sys.stdout.flush()
 
+                save_video = MPI.COMM_WORLD.Get_rank() == 0 and n_iter == 0 and epoch % 10 == 0
+                frames = []
+
                 total_success_rate = []
                 mb_obs, mb_ag, mb_g, mb_actions = [], [], [], []
-                for _ in range(self.args.num_rollouts_per_mpi):
+                for n_test in range(self.args.num_rollouts_per_mpi):
                     per_success_rate = []
                     # reset the rollouts
                     ep_obs, ep_ag, ep_g, ep_actions = [], [], [], []
@@ -110,6 +113,11 @@ class ddpg_agent:
                     obs = observation['observation']
                     ag = observation['achieved_goal']
                     g = observation['desired_goal']
+
+                    if save_video:
+                        img = self.env.render('rgb_array', width=200, height=200)
+                        frames.append(img)
+
                     # start to collect samples
                     for t in range(self.env_params['max_timesteps']):
                         with torch.no_grad():
@@ -129,6 +137,11 @@ class ddpg_agent:
                         obs = obs_new
                         ag = ag_new
                         per_success_rate.append(info['is_success'])
+
+                        if save_video:
+                            img = self.env.render('rgb_array', width=200, height=200)
+                            frames.append(img)
+
                     total_success_rate.append(per_success_rate)
                     ep_obs.append(obs.copy())
                     ep_ag.append(ag.copy())
@@ -136,6 +149,11 @@ class ddpg_agent:
                     mb_ag.append(ep_ag)
                     mb_g.append(ep_g)
                     mb_actions.append(ep_actions)
+
+                if save_video:
+                    frames = np.array(frames)
+                    self.logger.save_video(frames, f"videos/epoch_{epoch:04d}/{self.args.env_name.split(':')[-1]}_agent.mp4")
+
                 total_success_rate = np.array(total_success_rate)
                 local_success_rate = np.mean(total_success_rate[:, -1])
                 train_success_rate = MPI.COMM_WORLD.allreduce(local_success_rate, op=MPI.SUM) / MPI.COMM_WORLD.Get_size()
