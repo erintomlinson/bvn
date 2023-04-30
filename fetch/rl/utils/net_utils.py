@@ -2,6 +2,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from rl.utils import torch_utils
+import numpy as np
+class LFF(nn.Linear):
+    def __init__(self, in_d, out, b_scale):
+        super().__init__(in_d, out)
+        nn.init.normal_(self.weight, std=b_scale/in_d)
+        nn.init.uniform_(self.bias, -1.0, 1.0)
+    def forward(self, x):
+        x = np.pi * super().forward(x)
+        return torch.sin(x)
 
 
 def get_activ(activ_name):
