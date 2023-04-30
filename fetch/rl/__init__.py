@@ -35,7 +35,7 @@ class Args(PrefixProto):
     cuda = Flag("cuda tend to be slower.")
     num_rollouts_per_mpi = 1
 
-    n_epochs = 200
+    n_epochs = 5#20
     n_cycles = 10
     optimize_every = 2
     n_batches = 1
@@ -70,7 +70,10 @@ class Args(PrefixProto):
     n_initial_rollouts = 1 if debug else 100
     n_test_rollouts = 15
     demo_length = 20
-
+    
+    fourier_features = None
+    fourier_dim_ratio = 40
+    fourier_b = 0.001
     logdir = None
 
 

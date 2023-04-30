@@ -8,6 +8,7 @@ from torch.distributions.normal import Normal
 
 from rl.normalizer import Normalizer
 from rl.utils import net_utils
+from rl.utils.net_utils import LFF
 
 LOG_STD_MAX = 2
 LOG_STD_MIN = -20
@@ -17,14 +18,17 @@ class Actor(nn.Module):
     def __init__(self, env_params, args):
         super().__init__()
         self.act_limit = env_params['action_max']
-
-        input_dim = env_params['obs'] + env_params['goal']
+        input_dim = env_params['obs'] + env_params['goal'] 
+        mlp_input_dim = input_dim if args.fourier_features is None else args.fourier_dim_ratio*input_dim
+        self.lff = LFF(input_dim, args.fourier_dim_ratio*input_dim, args.fourier_b)
         self.net = net_utils.mlp(
-            [input_dim] + [args.hid_size] * args.n_hids,
+            [mlp_input_dim] + [args.hid_size] * args.n_hids,
             activation=args.activ, output_activation=args.activ)
         self.mean = nn.Linear(args.hid_size, env_params['action'])
-
+        self.fourier_features = args.fourier_features
     def forward(self, inputs):
+        if self.fourier_features is not None:
+            inputs = self.lff(inputs)
         outputs = self.net(inputs)
         mean = self.mean(outputs)
         pi_action = torch.tanh(mean) * self.act_limit
@@ -59,12 +63,23 @@ class StateAsymMetricCritic(nn.Module):
         self.goal_dim = env_params['goal']
 
         embed_dim = args.metric_embed_dim
+        
+        f_input = env_params['obs'] + env_params['action']
+        phi_input = env_params['obs'] + env_params['goal']
+        
+        f_input_dim = f_input if args.fourier_features is None else args.fourier_dim_ratio*f_input
+        phi_input_dim = phi_input if args.fourier_features is None else args.fourier_dim_ratio*phi_input
+        
+        self.f_lff = LFF(f_input, args.fourier_dim_ratio*f_input, args.fourier_b)
+        self.phi_lff = LFF(phi_input, args.fourier_dim_ratio*phi_input, args.fourier_b)
+        
         self.f = net_utils.mlp(
-            [env_params['obs'] + env_params['action']] + [args.hid_size] * args.n_hids + [embed_dim],
+            [f_input_dim] + [args.hid_size] * args.n_hids + [embed_dim],
             activation=args.activ)
         self.phi = net_utils.mlp(
-            [env_params['obs'] + env_params['goal']] + [args.hid_size] * args.n_hids + [embed_dim],
+            [phi_input_dim] + [args.hid_size] * args.n_hids + [embed_dim],
             activation=args.activ)
+        self.fourier_features = args.fourier_features
 
     def forward(self, pi_inputs, actions):
         # NOTE: assume pi_inputs to be concatenated in the order [obs, goal]
@@ -86,11 +101,15 @@ class StateAsymMetricCritic(nn.Module):
 
     def f_embed(self, obses, actions):
         f_inputs = torch.cat([obses, actions / self.act_limit], dim=-1)
+        if self.fourier_features is not None:
+            f_inputs = self.f_lff(f_inputs)
         f_embeds = self.f(f_inputs)
         return f_embeds
 
     def state_phi_embed(self, obses, goals):
         phi_inputs = torch.cat([obses, goals], dim=-1)
+        if self.fourier_features is not None:
+            phi_inputs = self.phi_lff(phi_inputs)
         phi_embeds = self.phi(phi_inputs)
         return phi_embeds
 
