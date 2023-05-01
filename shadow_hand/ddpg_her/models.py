@@ -7,6 +7,15 @@ the input x in both networks should be [o, g], where o is the observation and g 
 
 """
 
+class LFF(nn.Linear):
+    def __init__(self, in_d, out, b_scale):
+        super().__init__(in_d, out)
+        nn.init.normal_(self.weight, std=b_scale/in_d)
+        nn.init.uniform_(self.bias, -1.0, 1.0)
+    def forward(self, x):
+        x = torch.pi * super().forward(x)
+        return torch.sin(x)
+
 def mlp(sizes):
     layers = []
     n_layer = len(sizes) - 1
@@ -25,15 +34,23 @@ def mlp(sizes):
 
 # define the actor network
 class actor(nn.Module):
-    def __init__(self, env_params):
+    def __init__(self, env_params, args):
         super(actor, self).__init__()
         self.max_action = env_params['action_max']
-        self.fc1 = nn.Linear(env_params['obs'] + env_params['goal'], 256)
+        self.args = args
+
+        self.input_dim = env_params['obs'] + env_params['goal']
+        self.mlp_input_dim = int(args.fourier_dim_ratio*self.input_dim) if args.fourier_features else self.input_dim
+
+        self.lff = LFF(self.input_dim, self.mlp_input_dim, args.fourier_b)
+        self.fc1 = nn.Linear(self.mlp_input_dim, 256)
         self.fc2 = nn.Linear(256, 256)
         self.fc3 = nn.Linear(256, 256)
         self.action_out = nn.Linear(256, env_params['action'])
 
     def forward(self, x):
+        if self.args.fourier_features:
+            x = self.lff(x)
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         x = F.relu(self.fc3(x))
@@ -65,12 +82,20 @@ class fullrank_two_stream_critic(nn.Module):
         self.args = args
         self.metric_args = metric_args
 
-        self.f_fc1 = nn.Linear(env_params['obs'] + env_params['action'], 174)
+        f_input_dim = env_params['obs'] + env_params['action']
+        f_mlp_input_dim = int(args.fourier_dim_ratio*f_input_dim) if args.fourier_features else f_input_dim
+
+        phi_input_dim = env_params['obs'] + env_params['goal']
+        phi_mlp_input_dim = int(args.fourier_dim_ratio*phi_input_dim) if args.fourier_features else phi_input_dim
+
+        self.f_lff = LFF(f_input_dim, f_mlp_input_dim, args.fourier_b)
+        self.f_fc1 = nn.Linear(f_mlp_input_dim, 174)
         self.f_fc2 = nn.Linear(174, 174)
         self.f_fc3 = nn.Linear(174, 174)
         self.f_out = nn.Linear(174, metric_args.metric_embed_dim)
 
-        self.phi_fc1 = nn.Linear(env_params['obs'] + env_params['goal'], 174)
+        self.phi_lff = LFF(phi_input_dim, phi_mlp_input_dim, args.fourier_b)
+        self.phi_fc1 = nn.Linear(phi_mlp_input_dim, 174)
         self.phi_fc2 = nn.Linear(174, 174)
         self.phi_fc3 = nn.Linear(174, 174)
         self.phi_out = nn.Linear(174, metric_args.metric_embed_dim)
@@ -78,12 +103,16 @@ class fullrank_two_stream_critic(nn.Module):
     def forward(self, x, actions):
         obs, goal = x[:, :self.env_params['obs']], x[:, self.env_params['obs']:]
         x = torch.cat([obs, actions / self.max_action], dim=1)
+        if self.args.fourier_features:
+            x = self.f_lff(x)
         x = F.relu(self.f_fc1(x))
         x = F.relu(self.f_fc2(x))
         x = F.relu(self.f_fc3(x))
         x = self.f_out(x)
 
         y = torch.cat([obs, goal], dim=1)
+        if self.args.fourier_features:
+            y = self.phi_lff(y)
         y = F.relu(self.phi_fc1(y))
         y = F.relu(self.phi_fc2(y))
         y = F.relu(self.phi_fc3(y))

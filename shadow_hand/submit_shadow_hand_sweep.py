@@ -13,6 +13,9 @@ submit_jobs = False
 class Config:
     env_name: str = 'HandManipulateBlockRotateZ-v0'
     seed: int = 100
+    fourier_features: bool = False
+    fourier_dim_ratio: int = 40
+    fourier_b: float = 0.001
     partition: str = 'seas_gpu'
     constraint: str = 'skylake'
 
@@ -28,21 +31,25 @@ env_name_ = [
     'HandManipulatePen-v0'
 ]
 seed_ = [100, 200, 300, 400, 500]
+fourier_features_ = [True]
 
 exps = []
-for env_name, seed in product(env_name_, seed_):
-    exp = Config(env_name=env_name, seed=seed)
+for env_name, seed, fourier_features in product(env_name_, seed_, fourier_features_):
+    exp = Config(env_name=env_name, seed=seed, fourier_features=fourier_features)
     exps.append(exp)
 
 # Update to match your shadow_hand folder and python locations
-shadow_hand = '/n/holyscratch01/protopapas_lab/Everyone/etomlinson/repos/bvn/shadow_hand'
 python = '/n/home01/etomlinson/.conda/envs/bvn/bin/python3'
-train_template = f'{shadow_hand}/experiments/bvn/train_template.sh'
+shadow_hand = f'/n/holyscratch01/protopapas_lab/Everyone/etomlinson/repos/bvn/shadow_hand'
 
 if not os.path.exists('train_logs'):
    os.makedirs('train_logs')
 
 for idx, exp in enumerate(exps):
+
+    network = 'fbvn' if exp.fourier_features else 'bvn'
+    train_template = f'{shadow_hand}/experiments/{network}/train_template.sh'
+
 
     # Create train script specific for this job using train_template.py
     with open(train_template, 'r') as f:
@@ -52,12 +59,12 @@ for idx, exp in enumerate(exps):
         value = getattr(exp, field.name)
         template = template.replace(f'<{field.name.upper()}>', f"'{value}'" if isinstance(value, str) else f'{value}')
 
-    train_script = f'{shadow_hand}/experiments/bvn/train_{idx}.sh'
+    train_script = f'{shadow_hand}/experiments/{network}/train_{idx}.sh'
     with open(train_script, 'w') as f:
         f.write(template)
 
     # Build SLURM job submission script
-    job_name = f'shadow_hand_sweep_{idx}'
+    job_name = f'shadow_hand_sweep_{network}_{idx}'
     queue_file = f'{job_name}.queue'
     with open(queue_file, 'w') as f:
 
@@ -89,7 +96,7 @@ for idx, exp in enumerate(exps):
         f.write(f'cd {shadow_hand}\n')
         f.write(f'export PYTHONPATH=$PYTHONPATH:$(pwd)\n')
         f.write(f'export ML_LOGGER_ROOT=$(pwd)/results\n')
-        f.write(f'bash experiments/bvn/train_{idx}.sh\n')
+        f.write(f'bash experiments/{network}/train_{idx}.sh\n')
 
     if submit_jobs:
 

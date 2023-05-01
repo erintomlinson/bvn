@@ -45,13 +45,13 @@ class ddpg_agent:
         }[args.critic_type]
         
         # create the network
-        self.actor_network = actor(env_params)
+        self.actor_network = actor(env_params, args)
         self.critic_network = CriticCls(env_params, args, metric_args)
         # sync the networks across the cpus
         sync_networks(self.actor_network)
         sync_networks(self.critic_network)
         # build up the target network
-        self.actor_target_network = actor(env_params)
+        self.actor_target_network = actor(env_params, args)
         self.critic_target_network = CriticCls(env_params, args, metric_args)
         # load the weights into the target networks
         self.actor_target_network.load_state_dict(self.actor_network.state_dict())
@@ -73,6 +73,7 @@ class ddpg_agent:
         self.o_norm = normalizer(size=env_params['obs'], default_clip_range=self.args.clip_range)
         self.g_norm = normalizer(size=env_params['goal'], default_clip_range=self.args.clip_range)
         # create the dict for store the model
+        self.args.save_dir = f'{self.args.save_dir}/fbvn' if self.args.fourier_features else f'{self.args.save_dir}/bvn'
         if MPI.COMM_WORLD.Get_rank() == 0:
             if not os.path.exists(self.args.save_dir):
                 os.mkdir(self.args.save_dir)

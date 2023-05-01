@@ -40,6 +40,10 @@ class Args(PrefixProto):
     clip_inputs = True
     normalize_inputs = True
 
+    fourier_features = False
+    fourier_dim_ratio = 40
+    fourier_b = 0.001
+
 class MetricArgs(PrefixProto):
     metric_embed_dim = 16
     metric_norm_ord = 2

@@ -36,7 +36,10 @@ def main(dep: Args = {}):
     Args._update(dep)
     MetricArgs._update(dep)
 
-    os.environ["ML_LOGGER_ROOT"] = f"{os.getcwd()}/results/{Args.agent_type}/{Args.critic_type}/{Args.env_name}/{Args.seed}"
+    if Args.fourier_features:
+        os.environ["ML_LOGGER_ROOT"] = f"{os.getcwd()}/results/fbvn/{Args.agent_type}/{Args.critic_type}/{Args.env_name}/{Args.seed}"
+    else:
+        os.environ["ML_LOGGER_ROOT"] = f"{os.getcwd()}/results/bvn/{Args.agent_type}/{Args.critic_type}/{Args.env_name}/{Args.seed}"
 
     from ml_logger import logger, RUN
     print("Dep", dep)
